@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+logs/
+local_config.json
+*_valid.txt
+*_invalid.txt
+*_backup.txt
+cracker_errors.log
+.vscode/
+.env
+*.egg-info/
+dist/
+build/

@@ -1,0 +1,4 @@
+requests>=2.34.2
+urllib3>=2.7.0
+eel>=0.18.2
+pywebview>=6.2.1

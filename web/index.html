@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MikroKiller Ultimate</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script type="text/javascript" src="/eel.js"></script>
+
+    <style>
+        /* Extra ambient blob in center, inlined for quick override */
+        .blob-mid {
+            position: fixed;
+            z-index: 0;
+            pointer-events: none;
+            border-radius: 50%;
+            filter: blur(90px);
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(88, 28, 220, 0.09) 0%, transparent 70%);
+            top: 40%; left: 42%;
+            transform: translate(-50%, -50%);
+        }
+        /* Noise texture overlay */
+        .noise {
+            position: fixed; inset: 0;
+            z-index: 0; pointer-events: none;
+            opacity: 0.028;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-size: 256px 256px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="cursor-glow"></div>
+
+<div class="blob-mid"></div>
+<div class="noise"></div>
+
+<div class="app-container">
+
+    
+    <nav class="sidebar">
+        <div class="brand">
+            <h2>⚡ MikroKiller</h2>
+            <p class="version">Ultimate v3.0</p>
+        </div>
+
+        <ul class="nav-links">
+            <li class="active" data-target="adapter-tab">
+                <span class="icon">🎛️</span> Adapter
+            </li>
+            <li data-target="settings-tab">
+                <span class="icon">⚙️</span> Configuration
+            </li>
+            <li data-target="console-tab">
+                <span class="icon">💻</span> Console
+            </li>
+            <li data-target="analysis-tab">
+                <span class="icon">📊</span> Analysis
+            </li>
+        </ul>
+    </nav>
+
+    
+    <main class="main-content">
+
+        
+        <section id="console-tab" class="tab-content">
+            <div class="header-glass">
+                <h1><span class="icon-prefix">💻</span> Console</h1>
+                <div id="status-badge" class="status-badge">Idle</div>
+            </div>
+
+            <div class="glass-panel console-controls">
+                <div class="slider-group">
+                    <label>Threads: <span id="threads-val">20</span></label>
+                    <input type="range" id="threads-slider" min="5" max="100" value="20">
+                </div>
+                <div class="btn-group">
+                    <button id="btn-start"  class="btn btn-primary">▶ Start Attack</button>
+                    <button id="btn-pause"  class="btn btn-warning" disabled>⏸ Pause</button>
+                    <button id="btn-stop"   class="btn btn-danger"  disabled>■ Stop</button>
+                </div>
+            </div>
+
+            
+            <div class="stats-cards-grid">
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">⚡</span>
+                        <span class="stat-title">Attempts</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-tried">0</div>
+                    <div class="stat-card-unit">total</div>
+                </div>
+
+                <div class="stat-card success-theme">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">✅</span>
+                        <span class="stat-title">Valid Found</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-valid">0</div>
+                    <div class="stat-card-unit">credentials</div>
+                </div>
+
+                <div class="stat-card error-theme">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">❌</span>
+                        <span class="stat-title">Errors</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-errors">0</div>
+                    <div class="stat-card-unit">failed</div>
+                </div>
+
+                <div class="stat-card speed-theme">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">🚀</span>
+                        <span class="stat-title">Speed</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-rps">0</div>
+                    <div class="stat-card-unit">req/s</div>
+                </div>
+
+                <div class="stat-card elapsed-theme">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">⏱️</span>
+                        <span class="stat-title">Elapsed</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-elapsed">00:00</div>
+                    <div class="stat-card-unit">time</div>
+                </div>
+
+                <div class="stat-card rate-theme">
+                    <div class="stat-card-header">
+                        <span class="stat-icon">📊</span>
+                        <span class="stat-title">Success Rate</span>
+                    </div>
+                    <div class="stat-card-value" id="stat-success-rate">0<span style="font-size:0.7em">%</span></div>
+                    <div class="stat-card-unit">hit rate</div>
+                </div>
+            </div>
+
+            <div class="console-and-hits">
+            <div class="console-output" id="console-output">
+                <div class="log-entry system">MikroKiller Engine initialized — ready.</div>
+            </div>
+
+            
+            <div class="glass-panel valid-hits-panel" id="valid-hits-panel">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0">
+                    <span style="font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--t3);text-transform:uppercase">Valid Hits</span>
+                    <button id="btn-copy-valid" class="btn btn-ghost" style="padding:3px 10px;font-size:11px">Copy</button>
+                </div>
+                <div id="valid-hits-list" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+                    <span style="color:var(--t3);font-size:12px;text-align:center;margin-top:20px">None yet</span>
+                </div>
+            </div>
+            </div>
+        </section>
+
+        
+        <section id="settings-tab" class="tab-content">
+            <div class="header-glass">
+                <h1><span class="icon-prefix">⚙️</span> Attack Settings</h1>
+                <div class="btn-group">
+                    <button id="btn-load-config" class="btn btn-ghost">📂 Load Profile</button>
+                    <button id="btn-save-config" class="btn btn-ghost">💾 Save Profile</button>
+                </div>
+            </div>
+
+            <div class="settings-grid">
+                
+                <div class="glass-panel form-group">
+                    <h3>Target Configuration</h3>
+
+                    <label>Router IP / URL <span style="opacity:.5;font-size:11px">(leave empty to auto-detect)</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                        <input type="text" id="scan-url" placeholder="e.g. http://192.168.88.1 — leave empty to auto-detect" style="flex:1;margin:0">
+                        <button id="btn-scan" class="btn btn-accent" style="padding:0 18px;height:auto;white-space:nowrap;flex-shrink:0;font-size:13px">⚡ Scan</button>
+                    </div>
+
+                    
+                    <div id="scan-result-inline" style="display:none; margin-top:10px; padding:10px 14px;
+                         background:rgba(139,92,246,0.08); border:1px solid rgba(139,92,246,0.2);
+                         border-radius:8px; font-size:12px; color:var(--t2); line-height:1.7;">
+                    </div>
+
+                    <label style="margin-top:14px">Target URL / Form Action</label>
+                    <input type="text" id="target-url" value="http://10.0.0.1">
+
+                    <label>Session Name</label>
+                    <input type="text" id="session-name" value="Session_1">
+
+                    <label>Auth Mode</label>
+                    <select id="auth-mode">
+                        <option value="both">Both — Username &amp; Password</option>
+                        <option value="username">Username Only (Voucher)</option>
+                        <option value="password">Password Only</option>
+                    </select>
+                </div>
+
+                
+                <div class="glass-panel form-group" id="user-settings-box">
+                    <h3>Username Settings</h3>
+                    <label>Form Field Name</label>
+                    <input type="text" id="user-field" value="username">
+
+                    <label>Static Value <span style="color:var(--t3);font-weight:400;font-size:11px">(empty = bruteforce)</span></label>
+                    <input type="text" id="user-static" placeholder="e.g. admin">
+
+                    <label>Character Type</label>
+                    <select id="user-char">
+                        <option value="digits">Digits (0–9)</option>
+                        <option value="letters">Letters (a–z, A–Z)</option>
+                        <option value="alphanumeric">Alphanumeric</option>
+                    </select>
+
+                    <div class="row">
+                        <div class="col">
+                            <label>Min Length</label>
+                            <input type="number" id="user-min" value="8">
+                        </div>
+                        <div class="col">
+                            <label>Max Length</label>
+                            <input type="number" id="user-max" value="8">
+                        </div>
+                    </div>
+
+                    <div class="row" style="margin-top: 10px;">
+                        <div class="col">
+                            <label>Starts With</label>
+                            <input type="text" id="user-start" placeholder="e.g. 10">
+                        </div>
+                        <div class="col">
+                            <label>Contains</label>
+                            <input type="text" id="user-contains" placeholder="e.g. 55">
+                        </div>
+                        <div class="col">
+                            <label>Ends With</label>
+                            <input type="text" id="user-end" placeholder="e.g. 9">
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="glass-panel form-group" id="pass-settings-box">
+                    <h3>Password Settings</h3>
+                    <label>Form Field Name</label>
+                    <input type="text" id="pass-field" value="password">
+
+                    <label>Static Value <span style="color:var(--t3);font-weight:400;font-size:11px">(empty = bruteforce)</span></label>
+                    <input type="text" id="pass-static" placeholder="Leave empty to bruteforce">
+
+                    <label>Character Type</label>
+                    <select id="pass-char">
+                        <option value="digits">Digits (0–9)</option>
+                        <option value="letters">Letters (a–z, A–Z)</option>
+                        <option value="alphanumeric">Alphanumeric</option>
+                    </select>
+
+                    <div class="row">
+                        <div class="col">
+                            <label>Min Length</label>
+                            <input type="number" id="pass-min" value="8">
+                        </div>
+                        <div class="col">
+                            <label>Max Length</label>
+                            <input type="number" id="pass-max" value="8">
+                        </div>
+                    </div>
+
+                    <div class="row" style="margin-top: 10px;">
+                        <div class="col">
+                            <label>Starts With</label>
+                            <input type="text" id="pass-start" placeholder="e.g. 10">
+                        </div>
+                        <div class="col">
+                            <label>Contains</label>
+                            <input type="text" id="pass-contains" placeholder="e.g. 55">
+                        </div>
+                        <div class="col">
+                            <label>Ends With</label>
+                            <input type="text" id="pass-end" placeholder="e.g. 9">
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="glass-panel form-group">
+                    <h3>Advanced Options</h3>
+
+                    <label>Stop after <span style="color:var(--p400);font-weight:600" id="stop-after-val">1</span> valid hit(s)</label>
+                    <input type="number" id="stop-after-entry" min="1" value="1"
+                           style="width:100%;margin-bottom:10px">
+
+                    <label class="checkbox-label" for="stealth-mode">
+    <input type="checkbox" id="stealth-mode">
+    <span class="toggle"></span>
+    Enable Stealth Mode
+</label>
+                    <label class="checkbox-label" for="auto-spoof">
+    <input type="checkbox" id="auto-spoof">
+    <span class="toggle"></span>
+    Auto-Spoof MAC Address
+                        <span style="font-size:11px;color:var(--t3);margin-left:2px">(Admin required)</span>
+</label>
+
+                    <label style="margin-top:4px">Telegram Bot Token</label>
+                    <input type="text" id="tg-token" placeholder="Optional — for alerts">
+
+                    <label>Telegram Chat ID</label>
+                    <input type="text" id="tg-chat" placeholder="Optional">
+                </div>
+            </div>
+        </section>
+
+        
+        <section id="analysis-tab" class="tab-content">
+            <div class="header-glass">
+                <h1><span class="icon-prefix">📊</span> Pattern Analysis</h1>
+            </div>
+            <div class="glass-panel form-group" style="flex:1;overflow-y:auto">
+                <h3>Voucher Samples</h3>
+                <p class="hint">Paste old valid vouchers to extract patterns. Format: <code style="color:var(--p300);font-size:11.5px">code</code> or <code style="color:var(--p300);font-size:11.5px">user:pass</code></p>
+                <label class="checkbox-label" for="enable-learning">
+    <input type="checkbox" id="enable-learning">
+    <span class="toggle"></span>
+    Enable Pattern Learning
+</label>
+                <textarea id="manual-samples" rows="10" placeholder="Paste vouchers here — one per line"></textarea>
+                <button id="btn-analyze" class="btn btn-primary mt-10">🧠 Analyze Samples</button>
+
+                <label style="margin-top:18px">Extracted Patterns</label>
+                <textarea id="pattern-results" readonly rows="5" placeholder="Patterns appear after analysis..."></textarea>
+            </div>
+        </section>
+
+        
+        <section id="adapter-tab" class="tab-content active">
+            <div class="header-glass">
+                <h1><span class="icon-prefix">🎛️</span> Network Adapter</h1>
+                <button id="btn-refresh-adapters" class="btn btn-ghost">🔄 Refresh</button>
+            </div>
+
+            <div class="glass-panel form-group" style="max-width:680px">
+                <h3>Network Adapter Binding</h3>
+                <p class="hint">
+                    Select multiple network adapters to multiply attack speed — each adapter runs independently.
+                </p>
+                
+                <div id="adapter-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;">
+                    <div style="color:var(--t3);font-size:12px;text-align:center;padding:20px 0">
+                        Loading adapters...
+                    </div>
+                </div>
+
+                
+                <div id="adapter-status-box" style="
+                    display:none;
+                    padding:12px 16px;
+                    background:rgba(139,92,246,0.08);
+                    border:1px solid rgba(139,92,246,0.25);
+                    border-radius:10px;
+                    font-size:12.5px;
+                    color:var(--t2);
+                    line-height:1.7;
+                ">
+                    <span style="color:var(--p400);font-weight:600">✅ Active Binding:</span>
+                    <span id="adapter-status-text"></span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<div id="reconnect-modal" style="display:none; position:fixed; inset:0; z-index:9999;
+     background:rgba(0,0,0,0.75); backdrop-filter:blur(6px);
+     align-items:center; justify-content:center;">
+  <div style="background:#13111f; border:1px solid rgba(139,92,246,0.35);
+              border-radius:16px; padding:36px 40px; max-width:420px; width:90%;
+              box-shadow:0 0 60px rgba(139,92,246,0.2); text-align:center;">
+    <div style="font-size:40px; margin-bottom:12px;">⚠️</div>
+    <h2 style="color:#f1f0ff; font-size:18px; margin-bottom:8px;">Wrong Network Detected</h2>
+    <p style="color:#a09ec0; font-size:13px; line-height:1.6; margin-bottom:6px;">
+      After MAC spoofing, the device connected to a different network.
+    </p>
+    <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:12px 16px; margin:16px 0; text-align:left; font-size:12px; color:#a09ec0;">
+      <div>Expected: <span id="modal-expected-ssid" style="color:#c4b5fd; font-weight:600;"></span></div>
+      <div style="margin-top:4px">Connected to: <span id="modal-current-ssid" style="color:#f87171; font-weight:600;"></span></div>
+    </div>
+    <p style="color:#a09ec0; font-size:13px; margin-bottom:20px;">
+      Please reconnect to <strong style="color:#c4b5fd;" id="modal-ssid-name"></strong> manually, then press Resume.
+    </p>
+    <button id="btn-resume-reconnect" class="btn btn-primary" style="width:100%; padding:12px;">
+      ✅ I'm Connected — Resume Attack
+    </button>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
