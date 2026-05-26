@@ -111,7 +111,9 @@ class VoucherCracker :
         self.ip_to_alias ={}
         retries =Retry(total =2, backoff_factor =0.3, status_forcelist =[500, 502, 503, 504])
 
-        if self.bound_adapter_ips :
+        is_localhost =('127.0.0.1'in self.target_url or 'localhost'in self.target_url)
+        
+        if self.bound_adapter_ips and not is_localhost :
             import subprocess
             for ip in self.bound_adapter_ips :
                 session =requests.Session()
@@ -127,7 +129,8 @@ class VoucherCracker :
                         self.ip_to_alias [ip]=alias
                 except :
                     pass
-        else :
+        
+        if not self.sessions :
             session =requests.Session()
             adapter =HTTPAdapter(max_retries =retries)
             session.mount('http://', adapter)
@@ -476,7 +479,9 @@ class VoucherCracker :
 
         self.log(f'[-] MikroKiller Engine Active.Targeting {self.target_url}')
 
-        if self.bound_adapter_ips :
+        is_localhost =('127.0.0.1'in self.target_url or 'localhost'in self.target_url)
+        
+        if self.bound_adapter_ips and not is_localhost :
             self.log(f'[-] Bound to {len(self.bound_adapter_ips)} adapters: {", ".join(self.bound_adapter_ips)}')
             for ip in self.bound_adapter_ips :
                 alias =self.ip_to_alias .get(ip)
@@ -486,6 +491,8 @@ class VoucherCracker :
                     self.log(f'[-] Adapter {ip} Network: "{wifi["ssid"]}"')
                 else :
                     self.log(f'[-] Adapter {ip} LAN/localhost mode — network check disabled.')
+        elif is_localhost :
+            self.log('[-] Localhost target detected — using default adapter (adapter binding disabled for localhost)')
         else :
             self.log('[-] Bound to default adapter')
             wifi =get_current_wifi_info()
@@ -496,11 +503,19 @@ class VoucherCracker :
         try :
             self.sessions [0][0].get(self.target_url, timeout =5, verify =False)
             self.log('[*] Target reachable.Starting...')
-        except Exception :
-            self.log('[!] Warning: Target unreachable.Check your network.')
+        except requests.exceptions.ConnectionError as e:
+            self.log(f'[!] Warning: Target network unreachable — Connection failed: {str(e)[:100]}')
+        except requests.exceptions.Timeout:
+            self.log('[!] Warning: Target request timed out (5s).May be slow or unreachable.')
+        except Exception as e:
+            self.log(f'[!] Warning: Target unreachable — {type(e).__name__}: {str(e)[:100]}')
 
         try :
-            num_adapters =len(self.bound_adapter_ips)if self.bound_adapter_ips else 1
+            num_adapters =0
+            if self.bound_adapter_ips and not is_localhost :
+                num_adapters =len(self.bound_adapter_ips)
+            if num_adapters ==0 :
+                num_adapters =1
             executor =None
             current_total_workers =0
 
