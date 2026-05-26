@@ -381,7 +381,7 @@ class VoucherCracker :
                 return
             self._spoofing_ips .add(adapter_ip)
 
-        threading.Thread(target =self._auto_spoof_worker, args =(adapter_ip ), daemon =True).start()
+        threading.Thread(target =self._auto_spoof_worker, args =(adapter_ip,), daemon =True).start()
 
     def _auto_spoof_worker(self, adapter_ip):
 
