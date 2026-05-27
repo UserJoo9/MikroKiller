@@ -15,79 +15,48 @@ def get_network_adapters():
     adapters = []
 
     try:
-        ps_cmd = (
-            'powershell -NoProfile -Command "'
-            'Get-NetIPAddress -AddressFamily IPv4 | '
-            'Where-Object { $_.IPAddress -notlike \'169.254.*\' -and $_.IPAddress -ne \'127.0.0.1\' } | '
-            'Select-Object InterfaceAlias, IPAddress, InterfaceIndex | '
-            'ConvertTo-Csv -NoTypeInformation'
-            '"'
-        )
-        out = subprocess.check_output(ps_cmd, shell=True, timeout=10).decode(errors='ignore')
-        lines = [l.strip().strip('"') for l in out.strip().splitlines()]
+        import csv, io
+        out = subprocess.check_output(
+            'wmic nicconfig where IPEnabled=TRUE get IPAddress, Description /format:csv',
+            shell=True, timeout=5
+        ).decode(errors='ignore')
 
-        for line in lines[1:]:
-            if not line:
-                continue
-            parts = [p.strip().strip('"') for p in line.split(',')]
-            if len(parts) < 2:
-                continue
-            alias = parts[0]
-            ip = parts[1]
+        skip_keywords = ['loopback', 'tunnel', 'isatap', 'teredo', '6to4',
+                         'pseudo', 'vmware', 'virtualbox', 'hyper-v', 'vethernet']
 
-            if not ip or not re.match(r'^\d+\.\d+\.\d+\.\d+$', ip):
+        lines = [l for l in out.splitlines() if l.strip()]
+        if len(lines) < 2:
+            raise ValueError('no data')
+
+        reader = csv.DictReader(lines)
+        for row in reader:
+            desc = (row.get('Description') or '').strip()
+            ips_str = (row.get('IPAddress') or '').strip().strip('{}')
+            if not desc or not ips_str:
+                continue
+            if any(k in desc.lower() for k in skip_keywords):
                 continue
 
-            skip_keywords = ['loopback', 'tunnel', 'isatap', 'teredo', '6to4',
-                             'pseudo', 'vmware', 'virtualbox', 'hyper-v', 'vethernet']
-            if any(k in alias.lower() for k in skip_keywords):
+            ips = [ip.strip() for ip in ips_str.split(';') if ip.strip()]
+            ipv4 = next(
+                (ip for ip in ips
+                 if re.match(r'^\d+\.\d+\.\d+\.\d+$', ip)
+                 and not ip.startswith('169.254')
+                 and ip != '127.0.0.1'),
+                None
+            )
+            if not ipv4:
                 continue
 
             adapters.append({
-                'name': alias,
-                'ip': ip,
-                'description': alias,
+                'name': desc,
+                'ip': ipv4,
+                'description': desc,
                 'is_default': False,
             })
 
     except Exception:
         pass
-
-    if not adapters:
-        try:
-            out = subprocess.check_output('ipconfig /all', shell=True, timeout=8).decode(errors='ignore')
-            blocks = re.split(r'\r?\n(?=[^\s])', out)
-
-            for block in blocks:
-                lines = block.strip().splitlines()
-                if not lines:
-                    continue
-
-                header = lines[0].strip().rstrip(':')
-                skip_keywords = ['loopback', 'tunnel', 'isatap', 'teredo', '6to4']
-                if any(k in header.lower() for k in skip_keywords):
-                    continue
-
-                ip_match = re.search(r'IPv4 Address[\s.]*:\s*([\d.]+)', block)
-                if not ip_match:
-                    continue
-
-                ip = ip_match.group(1).strip()
-                if ip.startswith('169.254') or ip == '127.0.0.1':
-                    continue
-
-                desc_match = re.search(r'Description[\s.]*:\s*(.+)', block)
-                description = desc_match.group(1).strip() if desc_match else header
-
-                adapters.append({
-                    'name': header,
-                    'ip': ip,
-                    'description': description,
-                    'is_default': False,
-                })
-
-        except Exception:
-            pass
 
     default_ip = _get_default_route_local_ip()
     for a in adapters:
@@ -101,6 +70,7 @@ def get_network_adapters():
 def _get_default_route_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(1)
         s.connect(('8.8.8.8', 80))
         ip = s.getsockname()[0]
         s.close()
@@ -109,7 +79,7 @@ def _get_default_route_local_ip():
         pass
 
     try:
-        out = subprocess.check_output('route print 0.0.0.0', shell=True, timeout=5).decode(errors='ignore')
+        out = subprocess.check_output('route print 0.0.0.0', shell=True, timeout=3).decode(errors='ignore')
         m = re.search(r'0\.0\.0\.0\s+0\.0\.0\.0\s+[\d.]+\s+([\d.]+)', out)
         if m:
             return m.group(1).strip()
@@ -281,7 +251,6 @@ def get_wifi_adapter_reg(adapter_ip=None):
 
 def change_mac(adapter_ip=None):
     import random
-    import time
 
     adapter_key, driver_desc = get_wifi_adapter_reg(adapter_ip)
     if not adapter_key:
@@ -300,13 +269,8 @@ def change_mac(adapter_ip=None):
             winreg.SetValueEx(key, 'NetworkAddress', 0, winreg.REG_SZ, new_mac)
 
         subprocess.run(
-            f'powershell "Get-NetAdapter | Where-Object {{$_.InterfaceDescription -eq \'{driver_desc}\'}} | Disable-NetAdapter -Confirm:$false"',
-            shell=True
-        )
-        time.sleep(1.5)
-        subprocess.run(
-            f'powershell "Get-NetAdapter | Where-Object {{$_.InterfaceDescription -eq \'{driver_desc}\'}} | Enable-NetAdapter -Confirm:$false"',
-            shell=True
+            f'powershell -NoProfile "Restart-NetAdapter -InterfaceDescription \'{driver_desc}\' -Confirm:$false"',
+            shell=True, capture_output=True
         )
 
         return (True, new_mac)
@@ -315,8 +279,6 @@ def change_mac(adapter_ip=None):
 
 
 def restore_mac(adapter_ip=None):
-    import time
-
     adapter_key, driver_desc = get_wifi_adapter_reg(adapter_ip)
     if not adapter_key:
         return (False, 'No Wi-Fi adapter found')
@@ -332,13 +294,8 @@ def restore_mac(adapter_ip=None):
                 pass
 
         subprocess.run(
-            f'powershell "Get-NetAdapter | Where-Object {{$_.InterfaceDescription -eq \'{driver_desc}\'}} | Disable-NetAdapter -Confirm:$false"',
-            shell=True
-        )
-        time.sleep(1.5)
-        subprocess.run(
-            f'powershell "Get-NetAdapter | Where-Object {{$_.InterfaceDescription -eq \'{driver_desc}\'}} | Enable-NetAdapter -Confirm:$false"',
-            shell=True
+            f'powershell -NoProfile "Restart-NetAdapter -InterfaceDescription \'{driver_desc}\' -Confirm:$false"',
+            shell=True, capture_output=True
         )
 
         return (True, 'MAC restored')

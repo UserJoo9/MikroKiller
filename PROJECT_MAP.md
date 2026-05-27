@@ -1,6 +1,6 @@
 # PROJECT_MAP — MikroKiller
 
-> Generated: 2026-05-20 | Role: Staff Engineer / Tech Lead
+> Generated: 2026-05-27 | Role: Staff Engineer / Tech Lead
 
 ---
 
@@ -154,4 +154,16 @@
 | ~~P8~~ | ~~`license.dat` والنظام الكامل للترخيص (hwid.py + SECRET_SALT)~~ | ~~LOW~~ **REMOVED 22 May** |
 | ~~P9~~ | ~~`stealth: true` + `threads: 100` عدوانية جداً~~ | ~~MEDIUM~~ **FIXED** |
 | ~~P10~~ | ~~`cracker_errors.log` في CWD بدون مجلد~~ | ~~LOW~~ **FIXED** |
-| ~~P11~~ | ~~Phantom bound IPs تتراكم~~ | **FIXED** |
+| ~~P11~~ | ~~Phantom bound IPs تتراكم~~ | ~~**FIXED**~~ |
+| ~~C1~~ | ~~`cracker_config.json` ميت — لم يعد له مرجع~~ | ~~LOW~~ **DELETED 27 May** |
+| ~~C2~~ | ~~`Session_4_invalid.txt` و `Session_4_valid.txt` في جذر المشروع~~ | ~~LOW~~ **MOVED to sessions/ 27 May** |
+| ~~C3~~ | ~~`logs/strip_comments.py` — سكريبت مؤقت~~ | ~~LOW~~ **DELETED 27 May** |
+| ~~C4~~ | ~~`cracker_errors.log` في جذر المشروع~~ | ~~LOW~~ **DELETED 27 May** |
+| ~~C5~~ | ~~Logger يستخدم tkinter (blocking)~~ | ~~LOW~~ **FIXED 27 May** |
+| C6 | `ProxyManager` inline في cracker.py (15 سطر) — مقبول كما هو | INFO |
+| ~~C7~~ | ~~Config يحتوي `discord_token` + `discord_channel` ولكن غير معروض في GUI~~ | ~~MEDIUM~~ **FIXED 27 May** |
+| C8 | `Session_4_invalid.txt` الأصلي لا يزال في الجذر (مقفل بواسطة عملية أخرى — تم النسخ إلى sessions/) | LOW |
+| ~~C9~~ | ~~lab_server.py خطأ UnicodeEncodeException مع أحرف box-drawing~~ | ~~LOW~~ **FIXED 27 May** |
+| ~~S1~~ | ~~MAC spoofing بطيء: Disable/Enable + sleep(1.5) → Restart-NetAdapter~~ | ~~HIGH~~ **FIXED 27 May** |
+| ~~S2~~ | ~~`get_network_adapters()` يستخدم PowerShell (مهلة 10s) → wmic (559ms)~~ | ~~HIGH~~ **FIXED 27 May** |
+| ~~S3~~ | ~~سجلات الكونسول كثيرة جداً: كل 50 محاولة، رسائل adapter verbose~~ | ~~MEDIUM~~ **FIXED 27 May** |

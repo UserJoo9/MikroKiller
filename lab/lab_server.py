@@ -485,23 +485,25 @@ def print_stats():
         print()
 
 if __name__ =="__main__":
+    port_str = str(PORT)
+    v_len = len(list(VALID_VOUCHERS)[0])
     print(f"""
-╔══════════════════════════════════════════════════════╗
-║        MikroKiller — Test Lab Server                 ║
-╠══════════════════════════════════════════════════════╣
-║  URL      : http://localhost:{PORT}                   ║
-║  Field    : username(POST /login)                   ║
-║  Mode     : Username-only bruteforce                 ║
-║  Vouchers : {len(VALID_VOUCHERS)} valid {len(list(VALID_VOUCHERS)[0])}-digit codes hidden             ║
-║  Ratelimit: {MAX_HITS} req / {WINDOW_SECS}s window — {BLOCK_SECS}s block          ║
-╠══════════════════════════════════════════════════════╣
-║  In MikroKiller Settings:                            ║
-║    Target URL  -> http://localhost:{PORT}             ║
-║    Auth Mode   -> Username Only                      ║
-║    Field Name  -> username                           ║
-║    Char Type   -> Digits(0-9)                       ║
-║    Length      -> Min={len(list(VALID_VOUCHERS)[0])}  Max={len(list(VALID_VOUCHERS)[0])}                       ║
-╚══════════════════════════════════════════════════════╝
++========================================================+
+:        MikroKiller -- Test Lab Server                   :
++========================================================+
+:  URL      : http://localhost:{port_str:<47}:
+:  Field    : username (POST /login)                      :
+:  Mode     : Username-only bruteforce                    :
+:  Vouchers : {len(VALID_VOUCHERS):<6} valid {v_len}-digit codes hidden               :
+:  Ratelimit: {MAX_HITS} req / {WINDOW_SECS}s window -- {BLOCK_SECS}s block             :
++========================================================+
+:  In MikroKiller Settings:                               :
+:    Target URL  -> http://localhost:{port_str:<8}          :
+:    Auth Mode   -> Username Only                         :
+:    Field Name  -> username                              :
+:    Char Type   -> Digits (0-9)                          :
+:    Length      -> Min={v_len}  Max={v_len:<34}:
++========================================================+
     """)
 
     t =threading.Thread(target =print_stats, daemon =True)

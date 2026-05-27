@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     'pass_use_luhn': False,
     'analytic_mode': False,
     'stealth': False,
+    'delay': 0,
     'auto_spoof': True,
     'telegram_token': '',
     'telegram_chat': '',
@@ -34,7 +35,7 @@ DEFAULT_CONFIG = {
     'discord_token': '',
     'discord_channel': '',
     'scan_url': '',
-    'threads': 50,
+    'threads': 5,
     'stop_after': 1
 }
 

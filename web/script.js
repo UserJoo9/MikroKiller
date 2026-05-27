@@ -85,9 +85,13 @@ function get_config() {
         auth_mode:        authMode.value,
         threads:          parseInt(threadsSlider.value),
         stealth:          document.getElementById('stealth-mode').checked,
+        delay:            parseFloat(document.getElementById('delay-entry').value) || 0,
         auto_spoof:       document.getElementById('auto-spoof').checked,
         telegram_token:   document.getElementById('tg-token').value.trim(),
         telegram_chat:    document.getElementById('tg-chat').value.trim(),
+        discord_webhook:  document.getElementById('discord-webhook').value.trim(),
+        discord_token:    document.getElementById('discord-token').value.trim(),
+        discord_channel:  document.getElementById('discord-channel').value.trim(),
         stop_after:       parseInt(stopAfterEntry.value) || 1,
 
         user_field:       document.getElementById('user-field').value.trim(),
@@ -123,7 +127,14 @@ function fill_config(cfg) {
     s('auth-mode',    cfg.auth_mode);
     s('tg-token',     cfg.telegram_token);
     s('tg-chat',      cfg.telegram_chat);
+    s('discord-webhook', cfg.discord_webhook);
+    s('discord-token',   cfg.discord_token);
+    s('discord-channel', cfg.discord_channel);
     c('stealth-mode', cfg.stealth);
+    if (cfg.delay !== undefined) {
+        const el = document.getElementById('delay-entry');
+        if (el) el.value = cfg.delay;
+    }
     c('auto-spoof',   cfg.auto_spoof);
     c('enable-learning', cfg.analytic_mode);
     s('manual-samples', cfg.manual_samples);

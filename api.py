@@ -272,8 +272,7 @@ def api_update_threads(new_threads):
         try:
             val = int(new_threads)
             if val > 0:
-                cracker_instance.threads = val
-                console_log(f"[*] Threads updated dynamically to: {val} per adapter", 'warning')
+                cracker_instance.threads = max(min(val, 20), 5)
                 return True
         except Exception as e:
             print(f"Error updating threads: {e}")
