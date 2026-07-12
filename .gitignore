@@ -1,14 +1,36 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
-logs/
-local_config.json
-*_valid.txt
-*_invalid.txt
-*_backup.txt
-cracker_errors.log
-.vscode/
-.env
 *.egg-info/
 dist/
 build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+
+# Session data
+sessions/
+*_valid.txt
+*_invalid.txt
+*_backup.txt
+
+# Config (contains user-specific settings)
+local_config.json
+
+# Environment & secrets
+.env
+.env.*
+
+# Misc
+cracker_errors.log
+samples.txt
