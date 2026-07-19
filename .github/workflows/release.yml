@@ -62,8 +62,23 @@ jobs:
             --windows-console-mode=disable `
             --include-data-dir=web=web `
             --output-dir=dist `
-            --output-filename="MikroKiller-v$env:VER" `
             app.py
+
+          # Nuitka outputs dist/app.exe — rename to versioned name
+          $exe = $null
+          if (Test-Path dist/app.exe)     { $exe = "dist/app.exe" }
+          elseif (Test-Path dist/app)     { $exe = "dist/app" }
+          elseif (Test-Path dist/app.exe) { $exe = "dist/app.exe" }
+
+          if ($exe) {
+            $target = "dist/MikroKiller-v$env:VER.exe"
+            Move-Item -Path $exe -Destination $target -Force
+            Write-Host "Output: $target"
+          } else {
+            Write-Host "dist/ contents:"
+            Get-ChildItem -Path dist -Recurse -Force | Select-Object Mode, Length, FullName
+            throw "Nuitka did not produce an executable"
+          }
 
       - name: Create Release
         if: steps.version.outputs.changed == 'true'
@@ -71,12 +86,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VER: ${{ steps.version.outputs.version }}
         run: |
-          # Verify the built artifact exists
           $exe = "dist/MikroKiller-v$env:VER.exe"
           if (!(Test-Path $exe)) {
-            $files = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
-            if ($files) { $exe = $files.FullName }
-            else { throw "No .exe found in dist/" }
+            Write-Host "dist/ contents:"
+            Get-ChildItem -Path dist -Recurse -Force | Select-Object Mode, Length, FullName
+            throw "Expected exe not found: $exe"
           }
           gh release create "v$env:VER" $exe `
             --title "MikroKiller v$env:VER" `
