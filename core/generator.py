@@ -71,8 +71,14 @@ class VoucherGenerator :
         random_len =target_len -prefix_len -suffix_len
 
         if random_len <contains_len :
-
-            return start +contains +end
+            # Clamp: return the longest possible string within target_len
+            clamped = start + contains + end
+            if len(clamped) > max_len:
+                # Drop characters from the middle (contains) to fit
+                over = len(clamped) - max_len
+                mid = contains[:len(contains) - over]
+                clamped = start + mid + end
+            return clamped
 
         if char_type =='digits':
             chars =string .digits

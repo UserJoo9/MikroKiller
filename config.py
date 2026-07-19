@@ -1,5 +1,6 @@
 BRAND_NAME = 'MikroKiller'
 APP_TITLE = 'MikroKiller'
+APP_VERSION = '1.0.0'
 
 DEFAULT_CONFIG = {
     'target_url': 'http://10.0.0.1',

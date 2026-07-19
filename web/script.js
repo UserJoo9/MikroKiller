@@ -261,7 +261,12 @@ function setRunningState(running) {
 btnStart.addEventListener('click', async () => {
     const cfg = get_config();
     setRunningState(true);
-    await eel.api_start_attack(cfg)();
+    try {
+        await eel.api_start_attack(cfg)();
+    } catch (err) {
+        setRunningState(false);
+        update_console(`[!] Failed to start attack: ${err}`, 'error');
+    }
 });
 
 btnPause.addEventListener('click', async () => {

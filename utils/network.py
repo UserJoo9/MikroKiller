@@ -2,13 +2,34 @@ import subprocess
 import re
 import socket
 import requests
-import concurrent.futures
-from config import COMMON_ROUTER_IPS, PORTAL_PATHS
+import atexit
 
 try:
     import winreg
 except ImportError:
     winreg = None
+
+# Track spoofed adapters for automatic MAC restoration on exit
+_spoofed_adapter_registry = []
+
+
+def _restore_spoofed_macs():
+    """Restore original MAC of all adapters that were spoofed this session."""
+    for adapter_key, driver_desc in _spoofed_adapter_registry:
+        try:
+            root = winreg.HKEY_LOCAL_MACHINE
+            path = rf'SYSTEM\CurrentControlSet\Control\Class\{{4d36e972-e325-11ce-bfc1-08002be10318}}\{adapter_key}'
+            with winreg.OpenKey(root, path, 0, winreg.KEY_SET_VALUE) as key:
+                try:
+                    winreg.DeleteValue(key, 'NetworkAddress')
+                except FileNotFoundError:
+                    pass
+            subprocess.run(
+                f'powershell -NoProfile "Restart-NetAdapter -InterfaceDescription \'{driver_desc}\' -Confirm:$false"',
+                shell=True, capture_output=True
+            )
+        except Exception:
+            pass
 
 
 def get_network_adapters():
@@ -162,54 +183,6 @@ def get_current_wifi_info(adapter_ip=None, adapter_alias=None):
     return None
 
 
-def detect_portal_url():
-    detected_urls = set()
-    gateways = set()
-
-    try:
-        result = subprocess.check_output('ipconfig', shell=True).decode(errors='ignore')
-        matches = re.findall(r'Default Gateway[ .]*: (\d+\.\d+\.\d+\.\d+)', result)
-        gateways.update(matches)
-
-        if not gateways:
-            res2 = subprocess.check_output('route print 0.0.0.0', shell=True).decode(errors='ignore')
-            matches2 = re.findall(r'\s0\.0\.0\.0\s+0\.0\.0\.0\s+(\d+\.\d+\.\d+\.\d+)', res2)
-            gateways.update(matches2)
-    except:
-        pass
-
-    for gw in gateways:
-        for path in PORTAL_PATHS:
-            detected_urls.add(f'http://{gw}{path}')
-
-    for ip in COMMON_ROUTER_IPS:
-        for path in PORTAL_PATHS:
-            detected_urls.add(f'http://{ip}{path}')
-
-    def check_url(url):
-        try:
-            resp = requests.get(url, timeout=2, verify=False, allow_redirects=True)
-            if resp.status_code == 200:
-                content = resp.text.lower()
-                keywords = ['login', 'username', 'password', 'voucher', 'hotspot', 'connect', 'access']
-                if any(x in content for x in keywords):
-                    return url
-        except:
-            pass
-        return None
-
-    found = None
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(check_url, u): u for u in detected_urls}
-        for f in concurrent.futures.as_completed(futures):
-            res = f.result()
-            if res:
-                found = res
-                break
-
-    return found
-
-
 def get_wifi_adapter_reg(adapter_ip=None):
     if not winreg:
         return None, None
@@ -257,8 +230,9 @@ def change_mac(adapter_ip=None):
         return (False, 'No Wi-Fi adapter found in Registry.')
 
     try:
-        first_char = random.choice('0123456789ABCDEF')
-        second_char = random.choice('26AE')
+        # Locally-administered unicast MAC: first hex digit ∈ {2,6,A,E}
+        first_char = random.choice('26AE')
+        second_char = random.choice('0123456789ABCDEF')
         rest = ''.join(random.choices('0123456789ABCDEF', k=10))
         new_mac = first_char + second_char + rest
 
@@ -272,6 +246,11 @@ def change_mac(adapter_ip=None):
             f'powershell -NoProfile "Restart-NetAdapter -InterfaceDescription \'{driver_desc}\' -Confirm:$false"',
             shell=True, capture_output=True
         )
+
+        # Register for automatic MAC restoration on exit
+        _spoofed_adapter_registry.append((adapter_key, driver_desc))
+        if len(_spoofed_adapter_registry) == 1:
+            atexit.register(_restore_spoofed_macs)
 
         return (True, new_mac)
     except Exception as e:

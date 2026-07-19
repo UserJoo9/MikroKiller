@@ -4,10 +4,11 @@ import requests
 import re
 from core.cracker import VoucherCracker
 from config import DEFAULT_CONFIG
-from utils.network import detect_portal_url, get_network_adapters
+from utils.network import get_network_adapters
 
 cracker_instance = None
 import os
+import sys
 import json
 
 CONFIG_FILE = 'local_config.json'
@@ -32,15 +33,16 @@ selected_adapter_ips = []
 
 def console_log(message, msg_type='system'):
     try:
-        if 'Success' in message or '[+]' in message:
-            msg_type = 'success'
-        elif 'Failed' in message or '[!]' in message or 'Error' in message:
-            msg_type = 'error'
-        elif '[-] ' in message:
+        # Check neutral '[-]' prefix first, then positive, then negative keywords
+        if message.startswith('[-] '):
             msg_type = 'system'
+        elif '[+]' in message or 'Success' in message:
+            msg_type = 'success'
+        elif '[!]' in message or 'Failed' in message or 'Error' in message:
+            msg_type = 'error'
         eel.update_console(message, msg_type)()
     except Exception as e:
-        print(f"Eel Log Error: {e}")
+        print(f"[Eel Log Error] {e}", file=sys.stderr)
 
 
 @eel.expose

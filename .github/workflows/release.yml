@@ -1,0 +1,83 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Version Change
+        id: version
+        shell: pwsh
+        run: |
+          # Read APP_VERSION from config.py
+          $c = Get-Content -Path config.py -Raw
+          $m = [regex]::Match($c, "^APP_VERSION\s*=\s*'([^']+)'", 'Multiline')
+          if (!$m.Success) { throw "APP_VERSION not found in config.py" }
+          $version = $m.Groups[1].Value
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$version"
+
+          # Compare with latest version tag (format: v1.0.0)
+          $tag = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
+          $latest = if ($tag) { $tag.Substring(1) } else { '' }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "latest=$latest"
+
+          if ($version -ne $latest) {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "changed=true"
+            Write-Host "BUILD: version $latest -> $version"
+          } else {
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "changed=false"
+            Write-Host "SKIP: version unchanged ($version)"
+          }
+
+      - name: Setup Python
+        if: steps.version.outputs.changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        if: steps.version.outputs.changed == 'true'
+        run: |
+          pip install -r requirements.txt
+          pip install nuitka
+
+      - name: Build with Nuitka
+        if: steps.version.outputs.changed == 'true'
+        env:
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          nuitka --standalone --onefile `
+            --windows-console-mode=disable `
+            --include-data-dir=web=web `
+            --output-dir=dist `
+            --output-filename="MikroKiller-v$env:VER" `
+            app.py
+
+      - name: Create Release
+        if: steps.version.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.version.outputs.version }}
+        run: |
+          # Verify the built artifact exists
+          $exe = "dist/MikroKiller-v$env:VER.exe"
+          if (!(Test-Path $exe)) {
+            $files = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
+            if ($files) { $exe = $files.FullName }
+            else { throw "No .exe found in dist/" }
+          }
+          gh release create "v$env:VER" $exe `
+            --title "MikroKiller v$env:VER" `
+            --notes "Automated build and release triggered by version bump to v$env:VER."

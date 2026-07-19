@@ -324,9 +324,10 @@ STATS = {'total_requests': 0,
     'blocked_hits': 0,
     'valid_hits': 0,
     'invalid_hits': 0,
-    'start_time': datetime.now() }
+    'start_time': datetime.now(),
+    'block_start': {}}  # ip -> time when block started
 
-LOCK =threading.Lock()
+LOCK = threading.Lock()
 
 LOGIN_PAGE ="""<!DOCTYPE html>
 <html lang="en">
@@ -411,14 +412,24 @@ class HotspotHandler(http.server .BaseHTTPRequestHandler):
         return self.client_address [0]
 
     def _is_blocked(self):
-        ip =self._get_ip()
-        now =time.time()
-        with LOCK :
-            times =ATTEMPTS.get(ip, [])
+        ip = self._get_ip()
+        now = time.time()
+        with LOCK:
+            # Check if this IP is in an active block period
+            if ip in STATS['block_start']:
+                block_end = STATS['block_start'][ip] + BLOCK_SECS
+                if now < block_end:
+                    return True
+                else:
+                    # Block period expired — clear state
+                    del STATS['block_start'][ip]
+                    ATTEMPTS[ip] = []
 
-            times =[t for t in times if now -t <WINDOW_SECS]
-            ATTEMPTS [ip]=times
-            if len(times)>=MAX_HITS :
+            # Sliding window: keep only entries within WINDOW_SECS
+            times = [t for t in ATTEMPTS.get(ip, []) if now - t < WINDOW_SECS]
+            ATTEMPTS[ip] = times
+            if len(times) >= MAX_HITS:
+                STATS['block_start'][ip] = now
                 return True
             return False
 
@@ -480,9 +491,17 @@ class HotspotHandler(http.server .BaseHTTPRequestHandler):
 def print_stats():
     while True :
         time.sleep(5)
-        elapsed =(datetime.now()-STATS ["start_time"]).seconds
-        rps =STATS ["total_requests"]/max(elapsed, 1)
-        print()
+        elapsed = (datetime.now() - STATS["start_time"]).seconds
+        rps = STATS["total_requests"] / max(elapsed, 1)
+        valid_rate = (STATS["valid_hits"] / max(STATS["total_requests"], 1)) * 100
+        print(
+            f"  [Stats] {STATS['total_requests']} req | "
+            f"{STATS['valid_hits']} valid | "
+            f"{STATS['invalid_hits']} invalid | "
+            f"{STATS['blocked_hits']} blocked | "
+            f"{rps:.1f} req/s | "
+            f"{valid_rate:.1f}% success"
+        )
 
 if __name__ =="__main__":
     port_str = str(PORT)

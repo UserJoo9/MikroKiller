@@ -6,6 +6,10 @@ __pycache__/
 dist/
 build/
 
+# Nuitka build artifacts
+*.build/
+*.dist/
+
 # Virtual environment
 .venv/
 venv/
@@ -34,3 +38,5 @@ local_config.json
 # Misc
 cracker_errors.log
 samples.txt
+
+CLAUDE.md
