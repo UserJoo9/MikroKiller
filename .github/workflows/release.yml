@@ -59,6 +59,7 @@ jobs:
           VER: ${{ steps.version.outputs.version }}
         run: |
           nuitka --standalone --onefile `
+            --assume-yes-for-downloads `
             --windows-console-mode=disable `
             --include-data-dir=web=web `
             --output-dir=dist `
